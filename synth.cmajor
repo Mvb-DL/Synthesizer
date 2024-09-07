@@ -27,13 +27,6 @@ graph synth  [[main]]
     input event float32 oscSustain     [[ name: "Sustain", min: 0, max: 100, init: 100.0, step: 1 ]];
     input event float32 oscRelease     [[ name: "Release", min: 0, max: 10,  init: 2.0,   step: 0.01 ]];
 
-    //EFFECTS
-   // input event float32 reverb        [[ name: "Reverb",  min: 0, max: 10,  init: 0.1,   step: 0.01 ]];
-    input event float32 oscDelay         [[ name: "Delay",   min: 0, max: 10,  init: 1.0,   step: 0.01 ]];
-   /* input event float32 chorus          [[ name: "Chorus", min: 0, max: 100, init: 100.0, step: 1 ]];
-    input event float32 distortion      [[ name: "Distortion", min: 0, max: 100, init: 100.0, step: 1 ]]; */
-
-
     output stream float out;
 
     node frequencyGenerator = FrequencyGenerator;
@@ -65,6 +58,9 @@ graph synth  [[main]]
         oscRelease -> adsrGenerator.release;
 
         filterCutoff -> oscFilter.filterCutoff;
+        filterType -> oscFilter.filterType;
+
+
         oscFilter.filterOut -> filter.frequency;
 
         (adsrGenerator.out * osc.out) -> gain.in;
@@ -73,7 +69,7 @@ graph synth  [[main]]
 
         filter.out -> out;
         
-                                                               
+                                                              
     }
 
 }
@@ -248,22 +244,51 @@ processor Filter
 {
     input stream float32 filterIn;
     input event float filterCutoff;
+    input event float32 filterType;
 
     output event float32 filterOut;
 
-    float cutoffSequence;
+    float cutoffFrequency, type;  
 
     event filterCutoff (float c)
     {
-        cutoffSequence = c;
+        cutoffFrequency = c;
     }
 
+    event filterType (float t)
+    {
+        type = t;
+    }
 
     void main()
-    {
+    {   
+
         loop
         {   
-            filterOut <- cutoffSequence + (filterIn * 50.0f);
+
+            if (type == 1)
+            {   
+                cutoffFrequency = 2000.0f;
+                filterOut <- cutoffFrequency + (filterIn);
+            }
+
+            else if (type == 2)
+            {   
+                cutoffFrequency = 10000.0f;
+                filterOut <- cutoffFrequency + (filterIn);
+            }
+
+            else if (type == 3)
+            {   
+                cutoffFrequency = 1000.0f;
+                filterOut <- cutoffFrequency + (filterIn);
+            }
+
+            else{
+                cutoffFrequency = 20000.0f;
+                filterOut <- cutoffFrequency + (filterIn * 50.0f);
+            }
+
             advance();
         }
     }
