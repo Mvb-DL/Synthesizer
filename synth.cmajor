@@ -1,6 +1,8 @@
 
 graph synth  [[main]]
-{
+{   
+
+    //midi notes as input
     input event std::midi::Message midiIn;
 
     //MAIN PARAMETERS
@@ -27,10 +29,10 @@ graph synth  [[main]]
     input event float32 oscRelease     [[ name: "Release", min: 0, max: 10,  init: 2.0,   step: 0.01 ]];
 
     //EFFECTS
-   /* input event float32 reverb      [[ name: "Attack",  min: 0, max: 10,  init: 0.1,   step: 0.01 ]];
-    input event float32 delay       [[ name: "Decay",   min: 0, max: 10,  init: 1.0,   step: 0.01 ]];
-    input event float32 chorus     [[ name: "Sustain", min: 0, max: 100, init: 100.0, step: 1 ]];
-    input event float32 distortion     [[ name: "Sustain", min: 0, max: 100, init: 100.0, step: 1 ]]; */
+   // input event float32 reverb        [[ name: "Reverb",  min: 0, max: 10,  init: 0.1,   step: 0.01 ]];
+    input event float32 oscDelay         [[ name: "Delay",   min: 0, max: 10,  init: 1.0,   step: 0.01 ]];
+   /* input event float32 chorus          [[ name: "Chorus", min: 0, max: 100, init: 100.0, step: 1 ]];
+    input event float32 distortion      [[ name: "Distortion", min: 0, max: 100, init: 100.0, step: 1 ]]; */
 
 
     output stream float out;
@@ -38,6 +40,8 @@ graph synth  [[main]]
     node frequencyGenerator = FrequencyGenerator;
     node adsrGenerator = AdsrGenerator;
     node osc = Oscillator;
+    node delay = Delay;
+    node filter = std::filters (float)::tpt::onepole::Processor (0);
     node gain = Gain;
 
     connection {
@@ -45,23 +49,31 @@ graph synth  [[main]]
         midiIn -> std::midi::MPEConverter -> EventProcessor ->  frequencyGenerator.eventIn,
                                                                 adsrGenerator.eventIn;
 
+        masterGlide -> frequencyGenerator.glideIn; 
+        masterGain -> gain.level;
+        masterOctave     -> osc.octaveIn;
+
+        frequencyGenerator.note -> osc.noteIn;
+        oscSemitones   -> osc.semitonesIn;
+        oscDetune      -> osc.detuneIn;
+        oscLevel       -> osc.levelIn;
+        oscShape       -> osc.shapeIn;
+        
 
         oscAttack  -> adsrGenerator.attack;
         oscDecay   -> adsrGenerator.decay;
         oscSustain -> adsrGenerator.sustain;
         oscRelease -> adsrGenerator.release;
 
-        oscSemitones   -> osc.semitonesIn;
-        oscDetune      -> osc.detuneIn;
-        oscLevel       -> osc.levelIn;
-        oscShape       -> osc.shapeIn;
-        masterOctave     -> osc.octaveIn;
 
-        frequencyGenerator.note -> osc.noteIn;
+        (adsrGenerator.out * osc.out) -> delay.in;
 
-        (adsrGenerator.out * osc.out) -> gain.in;
-        masterGain -> gain.level;
+        oscDelay -> delay.delayLength;
+
+        delay.out -> gain.in;
+
         gain.out -> out;
+
                                                                
     }
 
@@ -235,6 +247,7 @@ processor FrequencyProcessor
 
 
 processor AdsrGenerator
+
     {
     input event (std::notes::NoteOn, std::notes::NoteOff) eventIn;
     input event float attack;
@@ -299,6 +312,36 @@ processor AdsrGenerator
             // Release
             currentValue *= releaseMultiplier;
             out <- float (currentValue);
+            advance();
+        }
+    }
+}
+
+
+processor Delay
+{
+    input  stream float in;
+    output stream float out;
+
+    input event float delayLength;
+
+    event delayLength (float delaySamples)  { readPos = wrap<maxDelayLength> (writePos - int(processor.frequency/delaySamples)); }
+
+    let maxDelayLength = 10000;
+
+    float[maxDelayLength] buffer;
+    wrap<maxDelayLength> readPos, writePos;
+
+    void main()
+    {
+        loop
+        {
+            out <- buffer[readPos];
+            buffer[writePos] = in;
+            
+            ++readPos;
+            ++writePos;
+
             advance();
         }
     }
