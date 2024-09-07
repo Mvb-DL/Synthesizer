@@ -17,10 +17,9 @@ graph synth  [[main]]
     input event float32 oscLevel        [[ name: "OSC Level",      min: 0,   max: 1,   init: 1,   step: 0.001 ]];
     input event float32 oscShape        [[ name: "OSC Shape",      min: 0,   max: 4,   init: 3,   text: "Sine|Triangle|Square|Ramp Up|Ramp Down"]];
 
-    /*FILTER
-    input event float32 filterCutoff    [[ name: "Filter Cutoff",    min: 100,  max: 20000, init: 1500, step: 1 ]];
-    input event float32 filterResonance [[ name: "Filter Resonance", min: 0,    max: 100,   init: 1, step: 1 ]];
-    input event float32 filterType      [[ name: "Filter Type",      min: 0,   max: 4,   init: 0,   text: "None|Low-pass|High-pass|Bandpass|Notch"]]; */
+    //FILTER
+    input event float32 filterCutoff    [[ name: "Filter Cutoff",    min: 0,  max: 20000, init: 1500, step: 1 ]];
+    input event float32 filterType      [[ name: "Filter Type",      min: 0,   max: 4,   init: 0,   text: "None|Low-pass|High-pass|Bandpass|Notch"]];
 
     //ENVELOPE
     input event float32 oscAttack      [[ name: "Attack",  min: 0, max: 10,  init: 0.1,   step: 0.01 ]];
@@ -39,9 +38,10 @@ graph synth  [[main]]
 
     node frequencyGenerator = FrequencyGenerator;
     node adsrGenerator = AdsrGenerator;
+    node oscFilter = Filter;
+    node filter  = std::filters::tpt::svf::Processor;
     node osc = Oscillator;
     node delay = Delay;
-    node filter = std::filters (float)::tpt::onepole::Processor (0);
     node gain = Gain;
 
     connection {
@@ -59,21 +59,20 @@ graph synth  [[main]]
         oscLevel       -> osc.levelIn;
         oscShape       -> osc.shapeIn;
         
-
         oscAttack  -> adsrGenerator.attack;
         oscDecay   -> adsrGenerator.decay;
         oscSustain -> adsrGenerator.sustain;
         oscRelease -> adsrGenerator.release;
 
+        filterCutoff -> oscFilter.filterCutoff;
+        oscFilter.filterOut -> filter.frequency;
 
-        (adsrGenerator.out * osc.out) -> delay.in;
+        (adsrGenerator.out * osc.out) -> gain.in;
 
-        oscDelay -> delay.delayLength;
+        gain.out -> filter.in;
 
-        delay.out -> gain.in;
-
-        gain.out -> out;
-
+        filter.out -> out;
+        
                                                                
     }
 
@@ -242,6 +241,32 @@ processor FrequencyProcessor
     event detuneIn (float f)        { detune = f * 0.01f;   frequencyOut <- std::notes::noteToFrequency (octave + note + semitones + detune); }
 
     float octave, note, semitones, detune;
+}
+
+
+processor Filter 
+{
+    input stream float32 filterIn;
+    input event float filterCutoff;
+
+    output event float32 filterOut;
+
+    float cutoffSequence;
+
+    event filterCutoff (float c)
+    {
+        cutoffSequence = c;
+    }
+
+
+    void main()
+    {
+        loop
+        {   
+            filterOut <- cutoffSequence + (filterIn * 50.0f);
+            advance();
+        }
+    }
 }
 
 
